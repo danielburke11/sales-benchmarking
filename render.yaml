@@ -1,0 +1,14 @@
+# Render Blueprint: ensures consistent deploy (Node version, build, start).
+# See https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: sales-benchmarking
+    runtime: node
+    # Use Node 20 so require() and built-ins work as expected
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+    # No dependencies in package.json; install is a no-op but must run
+    buildCommand: npm install
+    startCommand: npm start
+    # Render sets PORT automatically; server uses process.env.PORT

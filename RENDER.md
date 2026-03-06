@@ -90,6 +90,31 @@ That URL is your app: same host for the UI and the API.
 
 ---
 
+## If deploy fails
+
+1. **See the exact error**  
+   In the Render dashboard: open your **sales-benchmarking** service → **Logs**. Check the **Build** and **Deploy** tabs. The last lines usually show the failure (e.g. `npm install` error, `node: command not found`, or a crash when running `npm start`).
+
+2. **Confirm service settings**  
+   **Settings** → ensure:
+   - **Build Command:** `npm install` (or leave blank; Render defaults to this for Node).
+   - **Start Command:** `npm start`.
+   - **Root Directory:** leave blank (repo root).
+
+3. **Pin Node version**  
+   In **Environment**, add:
+   - **Key:** `NODE_VERSION`  
+   - **Value:** `20`  
+   Then **Save Changes** and trigger a **Manual Deploy** (Deploy → Deploy latest commit).
+
+4. **If the error is “Build failed”**  
+   Ensure **Build Command** is empty or exactly `npm install`. Do not use `npm run build` (there is no build script).
+
+5. **If the error is “Service failed to start”**  
+   The app may be crashing on startup. Check the **Deploy** log for a Node stack trace. If you see something like `Cannot find module 'X'`, the repo may be missing a file—ensure all of `server/index.js`, `package.json`, `index.html`, `app.js`, and `styles.css` are committed and pushed.
+
+---
+
 ## 7. Use and share the app
 
 - **Sales / stakeholders:** Open the URL in a browser to use the form and generate summary / metrics / tweets.

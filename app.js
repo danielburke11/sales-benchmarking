@@ -251,7 +251,32 @@ async function fetchRequestLog() {
         </div>
         <span class="request-log-status ${statusClass}">${escapeHtml(statusLabel)}</span>
         <span class="request-log-date">${escapeHtml(formatRequestDate(r.createdAt))}</span>
+        <button type="button" class="request-log-delete-btn btn ghost" title="Delete this request" aria-label="Delete request ${escapeHtml(r.id)}">Delete</button>
       `;
+      const deleteBtn = row.querySelector(".request-log-delete-btn");
+      if (deleteBtn) {
+        deleteBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!confirm(`Delete request for ${escapeHtml(company)}? This cannot be undone.`)) return;
+          const apiBase = getApiBase();
+          const url = apiBase ? `${apiBase}/api/requests/${r.id}` : `/api/requests/${r.id}`;
+          try {
+            const res = await fetch(url, { method: "DELETE" });
+            if (!res.ok) throw new Error(await res.text());
+            if (selectedRequestId === r.id) {
+              selectedRequestId = null;
+              currentRequest = null;
+              ["generate-summary", "generate-metrics", "generate-tweets"].forEach((id) => {
+                const btn = document.getElementById(id);
+                if (btn) btn.disabled = true;
+              });
+            }
+            fetchRequestLog();
+          } catch (err) {
+            alert("Could not delete: " + err.message);
+          }
+        });
+      }
       row.addEventListener("click", () => {
         ["summary-output", "metrics-output", "tweets-output"].forEach((id) => {
           const el = document.getElementById(id);

@@ -1,205 +1,143 @@
-# End-to-End Workflow: One Benchmark Cycle
+# End-to-End Workflow: Benchmark Request → Results → Content
 
-This playbook describes one full cycle — from sales submitting a request, to dev staging and running the benchmark, to results being stored automatically and the engineer marking complete, to sales generating content. **Sales** and **Dev/Engineer** sections are labeled so each team knows their steps.
+**One cycle:** Sales submits → Dev stages & runs benchmark → Script POSTs results → Engineer marks complete → Sales generates content.
 
----
-
-## Overview (one cycle)
-
-```
-Sales submits request
-    → Dev stages from GitHub
-    → Dev deploys & runs benchmark (Nirvana + AWS)
-    → Benchmark script POSTs results to the API when run finishes
-    → Engineer selects request in app and clicks "Mark complete and notify sales"
-    → Sales gets email, opens app, selects the completed request, generates summary / metrics / tweets
-```
+**Tools:** App (browser), API (curl or script), your infra (Nirvana + AWS + benchmark runner).
 
 ---
 
-## Phase 1: Sales submits a benchmark request
+## 1. Sales: Submit a request
 
-**Who:** Sales  
-**Where:** App (e.g. `https://your-app.onrender.com`)
+| Who   | Tool | When |
+|-------|------|------|
+| Sales | App (browser) | Start of cycle |
 
-### Steps
+**Steps:**
 
-1. **Open the app** and fill in the form:
-   - **Company** — e.g. Qdrant
-   - **Company website** — e.g. https://qdrant.tech
-   - **Product** — e.g. Qdrant vector DB
-   - **Vertical** — Vector database, Analytical database, SQL/OLTP, Key-value store, Distributed SQL, or Other
-   - **Company Twitter/X** — e.g. @qdrant_engine (optional)
-   - **Customer GitHub repo URL** — the customer’s OSS repo, e.g. https://github.com/qdrant/qdrant
-   - **Your email** — for “results ready” notification (optional)
-   - **Engineer email** — so the engineer receives the request and instructions (optional; if set, they get an email with next steps)
-
-2. **Check the vetted benchmark tool** (further down the page). It’s pre-filled from the vertical; edit only if you’re using a different tool.
-
-3. **Click “Submit benchmark request.”**
-
-### What happens
-
-- The request is stored with status **Sales requested** (pending_approval).
-- If you entered an **engineer email**, the engineer receives an email with the request ID, company, GitHub, benchmark tool, and instructions (stage → deploy → run benchmark → POST results → mark complete in the app).
-- In the **Request log** at the bottom, click **Refresh** to see your request. As the dev team works on it, status will move to **Back end deploying** (staged) and then **Completed** (ready).
-
-### What sales does next
-
-- When the request shows **Completed**, click that row in the Request log (it highlights). The three buttons above unlock: **Generate benchmark summary**, **Generate metrics block**, **Generate tweet drafts**. Use them to create and copy/download content.
+1. Open the app (e.g. `https://your-app.onrender.com`).
+2. Fill the form:
+   - Company, Company website, Product
+   - **Vertical** (Vector DB, Analytical, SQL/OLTP, Key-value, Distributed SQL, Other)
+   - **Customer GitHub repo URL** (required)
+   - Your email (optional; for “results ready” email)
+   - Engineer email (optional; engineer gets instructions email)
+3. Click **Submit benchmark request**.
+4. In **Request log** at the bottom, click **Refresh** and note your request (e.g. #1, status “Sales requested”).  
+   - To remove a request: click **Delete** on that row (confirm when asked).
 
 ---
 
-## Phase 2: Dev stages the request (resolve OSS from GitHub)
+## 2. Dev: Stage the request (GitHub → OSS)
 
-**Who:** Dev team  
-**Where:** API (same base URL as the app)
+| Who | Tool | When |
+|-----|------|------|
+| Dev  | API (curl) | After sales submits |
 
-### Steps
+**Steps:**
 
-1. **Find the request** — e.g. from the engineer email, or list requests:
+1. Get the request ID (from engineer email or by listing):
    ```bash
-   curl "https://your-app.onrender.com/api/requests"
+   curl "https://YOUR-APP-URL/api/requests"
    ```
-   Note the request `id` (e.g. `req_1720123456789_abc123`).
-
-2. **Stage the request** — resolve the customer’s GitHub repo and detect how to run their OSS (Docker image, docker-compose, etc.):
+2. Stage the request (replace `YOUR-APP-URL` and `REQUEST_ID`):
    ```bash
-   curl -X POST "https://your-app.onrender.com/api/requests/REQUEST_ID/stage"
+   curl -X POST "https://YOUR-APP-URL/api/requests/REQUEST_ID/stage"
    ```
-   Replace `REQUEST_ID` and your app URL.
-
-3. **Use the response.** The API returns **stagedConfig**, e.g.:
-   - `githubRepo`, `defaultBranch`, `dockerImage`, `dockerComposePath`, `dockerfilePath`  
-   Use these in your deploy scripts to run the customer’s OSS on Nirvana and AWS.
+3. Use the response **stagedConfig** (e.g. `dockerImage`, `dockerComposePath`, `githubRepo`) in your deploy.
 
 ---
 
-## Phase 3: Dev deploys, runs the benchmark, and sends results to the API
+## 3. Dev: Deploy, run benchmark, POST results
 
-**Who:** Dev team  
-**Where:** Your infra (Nirvana + AWS) and your benchmark runner/scripts
+| Who | Tool | When |
+|-----|------|------|
+| Dev  | Your infra (Nirvana + AWS) + API | After staging |
 
-### Steps
+**Steps:**
 
-1. **Provision infra** (Nirvana + AWS) with your Terraform/API. Use the same VM specs per vertical (see **Benchmark Outbound Playbook** or playbook doc for your org).
-
-2. **Deploy the OSS** on both clouds using the request’s **stagedConfig** (e.g. run the detected Docker image or docker-compose from the customer repo).
-
-3. **Run the benchmark tool** (from the request: `benchmarkToolLabel` / `benchmarkToolRepo`, e.g. VectorDBBench, ClickBench, sysbench, BenchBase) against both environments. Collect:
-   - QPS (or equivalent throughput)
-   - p99 latency
-   - Cost per hour (Nirvana vs AWS)
-   - Recall (if applicable)
-
-4. **When the run finishes, POST results to the API** so the engineer doesn’t have to type them in. Have your benchmark script (or a small wrapper) call:
+1. Provision VMs (Nirvana + AWS), same specs per vertical.
+2. Deploy the customer OSS using **stagedConfig** from step 2.
+3. Run the benchmark tool from the request (e.g. VectorDBBench, sysbench, BenchBase). Collect: QPS, p99, cost/hr, recall (if applicable).
+4. When the run finishes, **POST results** (replace `YOUR-APP-URL` and `REQUEST_ID`; use your real numbers):
    ```bash
-   curl -X POST "https://your-app.onrender.com/api/requests/REQUEST_ID/results" \
+   curl -X POST "https://YOUR-APP-URL/api/requests/REQUEST_ID/results" \
      -H "Content-Type: application/json" \
-     -d '{
-       "nirvanaQps": 12300,
-       "awsQps": 7900,
-       "nirvanaP99": 4.1,
-       "awsP99": 7.8,
-       "nirvanaCost": 1.8,
-       "awsCost": 3.2,
-       "recall": 0.99
-     }'
+     -d '{"nirvanaQps":12300,"awsQps":7900,"nirvanaP99":4.1,"awsP99":7.8,"nirvanaCost":1.8,"awsCost":3.2,"recall":0.99}'
    ```
-   Replace `REQUEST_ID` and your app URL. Use your actual metric values. Snake_case keys (`nirvana_qps`, `aws_qps`, etc.) are also accepted.
-
-   After this, the request has results stored. The engineer (or you) can mark it complete in the app (Phase 3b).
+   Or have your benchmark script call this when the run completes.
 
 ---
 
-## Phase 3b: Engineer marks the request complete (notify sales)
+## 4. Engineer: Mark complete (notify sales)
 
-**Who:** Engineer / Dev  
-**Where:** App (same URL)
+| Who      | Tool | When |
+|----------|------|------|
+| Engineer | App (browser) | After results are POSTed (or after run if using auto-fetch) |
 
-### Steps
+**Steps:**
 
-1. **Open the app** and scroll to **“Engineer: Mark request complete.”**
-
-2. **Select the request** in the dropdown (e.g. “1. Acme (Back end deploying)” or “2. Qdrant (Sales requested)”).
-
-3. **Click “Mark complete and notify sales.”**
-
-### What happens
-
-- The backend sets the request status to **ready** and uses the results already stored (from the benchmark script’s POST in Phase 3). If you configured **BENCHMARK_RESULTS_URL** or **BENCHMARK_FETCH_RESULTS_SCRIPT**, the backend can also fetch results automatically when none are stored.
-- If the request has a **sales email**, that person receives an email that the benchmark results are ready, with a link to the app.
-- In the **Request log**, the request now shows **Completed**. Sales can click it to select it and use the three generate buttons.
-
-**Alternative (API only):** If you prefer not to use the app, you can mark ready via API:
-```bash
-curl -X PATCH "https://your-app.onrender.com/api/requests/REQUEST_ID" \
-  -H "Content-Type: application/json" \
-  -d '{"status":"ready"}'
-```
-Results must already be stored (from POST in Phase 3) or the backend will try to fetch them if you configured the optional env vars.
+1. Open the app.
+2. Scroll to **Engineer: Mark request complete**.
+3. In the dropdown, **select the request** (e.g. “1. Acme (Back end deploying)”).
+4. Click **Mark complete and notify sales**.
+5. If a sales email was set, that person gets an email. In the **Request log**, the request now shows **Completed**.
 
 ---
 
-## Phase 4: Sales generates and exports content
+## 5. Sales: Generate content
 
-**Who:** Sales  
-**Where:** App (same URL as Phase 1)
+| Who   | Tool | When |
+|-------|------|------|
+| Sales | App (browser) | After request is Completed |
 
-### Steps
+**Steps:**
 
-1. **Open the app.** If you got an email that results are ready, use the link in the email.
+1. Open the app (or use the link from the “results ready” email).
+2. In **Request log**, click **Refresh**.
+3. **Click the row** of the **Completed** request (row highlights = selected).
+4. Use the three buttons:
+   - **Generate benchmark summary** → Copy or Download.
+   - **Generate metrics block** → Copy or Download.
+   - **Generate tweet drafts** → Copy or Download.
+5. Use the copied content in blog, social, or internal docs.
 
-2. **In the Request log** at the bottom, find the request that shows **Completed** and **click that row.** The row highlights to show it’s selected.
-
-3. **Generate each asset** (the three buttons use the selected request’s results):
-   - **Generate benchmark summary** — narrative summary. Use **Copy** or **Download** (e.g. `benchmark-summary.md`).
-   - **Generate metrics block** — Markdown table for blog posts. **Copy** or **Download** (e.g. `benchmark-metrics.md`).
-   - **Generate tweet drafts** — Tweet thread (hook, data, cost, CTA). **Copy** or **Download** (e.g. `tweet-thread.md`).
-
-4. **Use the content** in blog, X/Twitter, or internal docs as needed.
-
-### Tips
-
-- You can click different completed requests in the log to switch selection; the output areas clear and the buttons use the newly selected request.
-- If the buttons stay disabled, make sure you clicked a row with status **Completed** and click **Refresh** if the list is stale.
+To switch to another completed request: click its row (outputs clear; generate again for that request).
 
 ---
 
-## Quick reference: API endpoints (for dev)
+## API quick reference
 
-| Action | Method | Endpoint |
-|--------|--------|----------|
-| List requests | GET | `/api/requests` |
-| Get one request | GET | `/api/requests/:id` |
-| Create request | POST | `/api/requests` (sales submit) |
-| Stage from GitHub | POST | `/api/requests/:id/stage` |
-| **Store results** (from benchmark script) | **POST** | **`/api/requests/:id/results`** |
-| Mark ready / update | PATCH | `/api/requests/:id` |
-| Health check | GET | `/health` |
+| Action        | Method | Endpoint |
+|---------------|--------|----------|
+| List requests | GET    | `/api/requests` |
+| Get one       | GET    | `/api/requests/:id` |
+| Stage         | POST   | `/api/requests/:id/stage` |
+| Store results | POST   | `/api/requests/:id/results` |
+| Update/ready  | PATCH  | `/api/requests/:id` |
+| Delete        | DELETE | `/api/requests/:id` |
 
 Base URL = your app URL (e.g. `https://your-app.onrender.com`).
 
 ---
 
-## One-page checklist (print or share)
+## One-page E2E test checklist
 
 **Sales**
 
-- [ ] Fill form (company, website, product, vertical, customer GitHub URL, your email, optional engineer email).
-- [ ] Submit benchmark request.
-- [ ] Wait for “results ready” email or for the request to show **Completed** in the Request log.
-- [ ] Open app, click the **Completed** request in the log (row highlights).
-- [ ] Generate benchmark summary, metrics block, and tweet drafts; copy or download each.
+- [ ] Open app, fill form (company, website, product, vertical, **GitHub URL**, your email, engineer email).
+- [ ] Submit request. Refresh Request log; see new row “Sales requested.”
+- [ ] Wait for request to become “Completed” (after dev runs benchmark and engineer marks complete).
+- [ ] Click the Completed row; generate summary, metrics, tweets; copy or download each.
 
 **Dev / Engineer**
 
-- [ ] Find the new request (email or `GET /api/requests`).
-- [ ] Stage request: `POST /api/requests/:id/stage`.
-- [ ] Deploy OSS on Nirvana + AWS using stagedConfig; run the benchmark tool from the request.
-- [ ] When the benchmark run finishes, **POST results**: `POST /api/requests/:id/results` with JSON body (nirvanaQps, awsQps, nirvanaP99, awsP99, nirvanaCost, awsCost, recall).
-- [ ] In the app: open “Engineer: Mark request complete,” select the request, click **“Mark complete and notify sales.”** (Or `PATCH /api/requests/:id` with `{"status":"ready"}`.)
+- [ ] Get request ID: `curl YOUR-APP/api/requests`.
+- [ ] Stage: `curl -X POST YOUR-APP/api/requests/REQUEST_ID/stage`.
+- [ ] Deploy OSS on Nirvana + AWS; run benchmark tool; collect metrics.
+- [ ] POST results: `curl -X POST YOUR-APP/api/requests/REQUEST_ID/results -H "Content-Type: application/json" -d '{...}'`.
+- [ ] In app: Engineer section → select request → **Mark complete and notify sales**.
+- [ ] (Optional) Remove a request: use **Delete** on that row in the app, or `curl -X DELETE YOUR-APP/api/requests/REQUEST_ID`.
 
 ---
 
-This is one full cycle. Repeat for each new target: sales submits, dev stages and runs the benchmark and POSTs results, engineer marks complete, sales generates content from the app.
+**Full details:** `README.md` (API), `DEV_NEXT_STEPS.md` (dev focus), `RENDER.md` (deploy + env vars).

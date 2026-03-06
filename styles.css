@@ -330,7 +330,7 @@ select {
 
 .request-log-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto;
   gap: 0.75rem 1rem;
   align-items: center;
   padding: 0.6rem 0.75rem;
@@ -422,6 +422,15 @@ select {
   color: #9ca3af;
   font-size: 0.8rem;
   white-space: nowrap;
+}
+
+.request-log-delete-btn {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  opacity: 0.85;
+}
+.request-log-delete-btn:hover {
+  opacity: 1;
 }
 
 @media (max-width: 640px) {

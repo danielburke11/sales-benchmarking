@@ -173,7 +173,11 @@ function send(res, status, body) {
 }
 
 function sendEmail(to, subject, html) {
-  if (!RESEND_API_KEY || !to) return Promise.resolve();
+  if (!to) return Promise.resolve();
+  if (!RESEND_API_KEY) {
+    console.warn("[Email] Skipped: RESEND_API_KEY is not set. Set it in Render (or env) to send engineer/sales notifications.");
+    return Promise.resolve();
+  }
   const payload = JSON.stringify({
     from: FROM_EMAIL,
     to: [to],
@@ -194,10 +198,20 @@ function sendEmail(to, subject, html) {
       (res) => {
         let body = "";
         res.on("data", (ch) => (body += ch));
-        res.on("end", () => resolve());
+        res.on("end", () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            console.log("[Email] Sent to", to, "subject:", subject);
+          } else {
+            console.warn("[Email] Resend API error", res.statusCode, body);
+          }
+          resolve();
+        });
       }
     );
-    req.on("error", () => resolve());
+    req.on("error", (err) => {
+      console.warn("[Email] Request failed:", err.message);
+      resolve();
+    });
     req.write(payload);
     req.end();
   });
@@ -291,7 +305,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
     res.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     });
     res.end();
@@ -443,6 +457,19 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (id && req.method === "DELETE") {
+      const requests = loadRequests();
+      const index = requests.findIndex((r) => r.id === id);
+      if (index === -1) {
+        send(res, 404, { message: "Request not found" });
+        return;
+      }
+      requests.splice(index, 1);
+      saveRequests(requests);
+      send(res, 200, { deleted: id, message: "Request deleted" });
+      return;
+    }
+
     if (id && req.method === "PATCH") {
       const body = await parseBody(req);
       const requests = loadRequests();
@@ -486,4 +513,5 @@ server.listen(PORT, HOST, () => {
   console.log("  POST /api/requests/:id/stage   - resolve GitHub → OSS, stage for Nirvana + AWS");
   console.log("  POST /api/requests/:id/results - store results (benchmark script); backend can also auto-fetch via env");
   console.log("  PATCH /api/requests/:id   - update status/results (mark ready; results from body or auto-fetch)");
+  console.log("  DELETE /api/requests/:id - delete a request");
 });
