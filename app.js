@@ -165,6 +165,135 @@ function syncBenchmarkToolFromVertical() {
 
 let currentRequest = null;
 
+/** Map API status to display label for the request log */
+function getStatusLabel(status) {
+  switch (status) {
+    case "pending_approval":
+      return { label: "Sales requested", className: "request-log-status--requested" };
+    case "staged":
+      return { label: "Back end deploying", className: "request-log-status--deploying" };
+    case "ready":
+      return { label: "Completed", className: "request-log-status--completed" };
+    default:
+      return { label: status || "Unknown", className: "" };
+  }
+}
+
+function formatRequestDate(isoString) {
+  if (!isoString) return "—";
+  try {
+    const d = new Date(isoString);
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return isoString;
+  }
+}
+
+async function fetchRequestLog() {
+  const apiBase = getApiBase();
+  const listEl = document.getElementById("request-log-list");
+  const emptyEl = document.getElementById("request-log-empty");
+  const refreshBtn = document.getElementById("refresh-request-log");
+
+  if (!apiBase || !listEl) return;
+
+  if (refreshBtn) {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = "Refreshing…";
+  }
+
+  try {
+    const res = await fetch(`${apiBase}/api/requests`);
+    if (!res.ok) throw new Error("Failed to load requests");
+    const requests = await res.json();
+
+    emptyEl.style.display = Array.isArray(requests) && requests.length > 0 ? "none" : "block";
+
+    if (!Array.isArray(requests) || requests.length === 0) {
+      listEl.innerHTML = "";
+      listEl.appendChild(emptyEl);
+      emptyEl.style.display = "block";
+      emptyEl.textContent = "No requests yet. Submit a benchmark request above.";
+      return;
+    }
+
+    emptyEl.style.display = "none";
+    const sorted = [...requests].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    listEl.innerHTML = "";
+    sorted.forEach((r) => {
+      const { label: statusLabel, className: statusClass } = getStatusLabel(r.status);
+      const row = document.createElement("div");
+      row.className = "request-log-row";
+      row.setAttribute("data-request-id", r.id);
+      if (r.status === "ready" && r.results) {
+        row.setAttribute("data-ready", "1");
+        row.style.cursor = "pointer";
+        row.title = "Click to load this request and generate summary/metrics/tweets";
+      }
+      const company = r.company || "—";
+      const product = r.product ? ` · ${r.product}` : "";
+      const repo = r.githubUrl ? r.githubUrl.replace(/^https?:\/\//, "").replace(/\/$/, "") : "";
+      row.innerHTML = `
+        <div>
+          <div class="request-log-company">${escapeHtml(company)}${escapeHtml(product)}</div>
+          <div class="request-log-meta request-log-id">${escapeHtml(r.id)}</div>
+          ${repo ? `<div class="request-log-meta">${escapeHtml(repo)}</div>` : ""}
+        </div>
+        <span class="request-log-status ${statusClass}">${escapeHtml(statusLabel)}</span>
+        <span class="request-log-date">${escapeHtml(formatRequestDate(r.createdAt))}</span>
+      `;
+      row.addEventListener("click", () => {
+        if (row.getAttribute("data-ready") !== "1") return;
+        loadRequestById(r.id);
+      });
+      listEl.appendChild(row);
+    });
+  } catch (_) {
+    emptyEl.style.display = "block";
+    emptyEl.textContent = "Could not load requests. Check the app URL and try Refresh again.";
+    listEl.innerHTML = "";
+    listEl.appendChild(emptyEl);
+  } finally {
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = "Refresh";
+    }
+  }
+}
+
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+async function loadRequestById(id) {
+  const apiBase = getApiBase();
+  if (!apiBase) return;
+  try {
+    const res = await fetch(`${apiBase}/api/requests/${id}`);
+    if (!res.ok) return;
+    const record = await res.json();
+    if (record.status !== "ready" || !record.results) return;
+    currentRequest = {
+      id: record.id,
+      status: record.status,
+      salesInputs: {
+        company: record.company,
+        product: record.product,
+        vertical: record.vertical,
+        twitterHandle: record.twitterHandle,
+        githubUrl: record.githubUrl,
+        salesEmail: record.salesEmail,
+        benchmarkToolLabel: record.benchmarkToolLabel,
+        benchmarkToolRepo: record.benchmarkToolRepo,
+      },
+      results: record.results,
+    };
+    setResultsReady(record.results);
+  } catch (_) {}
+}
+
 function getApiBase() {
   const base = document.documentElement.getAttribute("data-api-base");
   if (base) return base.replace(/\/$/, "");
@@ -623,6 +752,7 @@ async function submitBenchmarkRequest() {
       if (statusEl) {
         statusEl.textContent = `Request #${created.id} submitted. Backend will take the OSS from GitHub and stage deployment (Nirvana + AWS).`;
       }
+      fetchRequestLog();
     } else {
       currentRequest = {
         id: `req_${Date.now()}`,
@@ -725,6 +855,11 @@ document.addEventListener("DOMContentLoaded", () => {
   syncBenchmarkToolFromVertical();
   const verticalEl = document.getElementById("vertical");
   verticalEl?.addEventListener("change", syncBenchmarkToolFromVertical);
+
+  const refreshLogBtn = document.getElementById("refresh-request-log");
+  refreshLogBtn?.addEventListener("click", () => fetchRequestLog());
+
+  fetchRequestLog();
 });
 
 // Allow backend/devs to mark a request as ready from the console:
