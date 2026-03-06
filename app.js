@@ -195,7 +195,9 @@ async function fetchRequestLog() {
   const emptyEl = document.getElementById("request-log-empty");
   const refreshBtn = document.getElementById("refresh-request-log");
 
-  if (!apiBase || !listEl) return;
+  if (!listEl) return;
+
+  const apiUrl = apiBase ? `${apiBase}/api/requests` : "/api/requests";
 
   if (refreshBtn) {
     refreshBtn.disabled = true;
@@ -203,7 +205,7 @@ async function fetchRequestLog() {
   }
 
   try {
-    const res = await fetch(`${apiBase}/api/requests`);
+    const res = await fetch(apiUrl);
     if (!res.ok) throw new Error("Failed to load requests");
     const requests = await res.json();
 
@@ -715,58 +717,55 @@ async function submitBenchmarkRequest() {
   if (btn) btn.disabled = true;
   if (statusEl) statusEl.textContent = "Submitting…";
 
+  const apiUrl = apiBase ? `${apiBase}/api/requests` : "/api/requests";
   try {
-    if (apiBase) {
-      const res = await fetch(`${apiBase}/api/requests`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          company: data.company,
-          companyWebsite: data.companyWebsite,
-          product: data.product,
-          vertical: data.vertical,
-          githubUrl: data.githubUrl,
-          twitterHandle: data.twitterHandle,
-          salesEmail: data.salesEmail,
-          benchmarkToolId: tool.id,
-          benchmarkToolLabel: data.benchmarkToolLabel || tool.label,
-          benchmarkToolRepo: data.benchmarkToolRepo || tool.repo,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || res.statusText || "Request failed");
-      }
-      const created = await res.json();
-      currentRequest = {
-        id: created.id,
-        status: created.status,
-        createdAt: created.createdAt,
-        salesInputs: data,
-        benchmarkTool: tool,
-        results: created.results,
-      };
-      if (created.status === "ready" && created.results) {
-        setResultsReady(created.results);
-      }
-      if (statusEl) {
-        statusEl.textContent = `Request #${created.id} submitted. Backend will take the OSS from GitHub and stage deployment (Nirvana + AWS).`;
-      }
-      fetchRequestLog();
-    } else {
-      currentRequest = {
-        id: `req_${Date.now()}`,
-        status: "pending_approval",
-        createdAt: new Date().toISOString(),
-        salesInputs: data,
-        benchmarkTool: tool,
-      };
-      if (statusEl) {
-        statusEl.textContent = `Request staged for backend using ${tool.label}. (No API base; run backend and set data-api-base on <html>.)`;
-      }
+    const res = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        company: data.company,
+        companyWebsite: data.companyWebsite,
+        product: data.product,
+        vertical: data.vertical,
+        githubUrl: data.githubUrl,
+        twitterHandle: data.twitterHandle,
+        salesEmail: data.salesEmail,
+        benchmarkToolId: tool.id,
+        benchmarkToolLabel: data.benchmarkToolLabel || tool.label,
+        benchmarkToolRepo: data.benchmarkToolRepo || tool.repo,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || res.statusText || "Request failed");
     }
+    const created = await res.json();
+    currentRequest = {
+      id: created.id,
+      status: created.status,
+      createdAt: created.createdAt,
+      salesInputs: data,
+      benchmarkTool: tool,
+      results: created.results,
+    };
+    if (created.status === "ready" && created.results) {
+      setResultsReady(created.results);
+    }
+    if (statusEl) {
+      statusEl.textContent = `Request #${created.id} submitted. Backend will take the OSS from GitHub and stage deployment (Nirvana + AWS).`;
+    }
+    fetchRequestLog();
   } catch (e) {
-    if (statusEl) statusEl.textContent = `Error: ${e.message}`;
+    currentRequest = {
+      id: `req_${Date.now()}`,
+      status: "pending_approval",
+      createdAt: new Date().toISOString(),
+      salesInputs: data,
+      benchmarkTool: tool,
+    };
+    if (statusEl) {
+      statusEl.textContent = `Request saved locally only. (API not reached: ${e.message}. On Render, the request should reach the backend — check the Request log and click Refresh.)`;
+    }
   } finally {
     if (btn) setTimeout(() => { btn.disabled = false; }, 500);
   }
