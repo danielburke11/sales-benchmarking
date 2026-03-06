@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>Nirvana Benchmark Playbook Assistant</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div>
+          <h1>Nirvana Benchmark Assistant</h1>
+          <p class="subtitle">
+            Front end for your benchmark-driven outbound playbook. Sales submits
+            benchmark requests; backend approves and runs; sales gets
+            ready-to-use content.
+          </p>
+        </div>
+      </header>
+
+      <main class="app-main">
+        <section class="card layout-two-column">
+          <div>
+            <h2>New benchmark request (sales)</h2>
+            <p class="section-help">
+              Sales enters the target company and the customer’s GitHub repo.
+              The backend resolves the repo to the open-source offering and
+              stages deployment on Nirvana and AWS.
+            </p>
+
+            <form class="form-grid" id="benchmark-form">
+              <h3 class="group-title">Target company & product</h3>
+              <div class="field">
+                <label for="company">Company</label>
+                <input
+                  id="company"
+                  name="company"
+                  type="text"
+                  placeholder="e.g. Qdrant"
+                  required
+                />
+              </div>
+              <div class="field">
+                <label for="company-website">Company website</label>
+                <input
+                  id="company-website"
+                  name="companyWebsite"
+                  type="url"
+                  placeholder="https://example.com"
+                  required
+                />
+              </div>
+              <div class="field">
+                <label for="product">Product</label>
+                <input
+                  id="product"
+                  name="product"
+                  type="text"
+                  placeholder="e.g. Qdrant vector DB"
+                />
+              </div>
+              <div class="field">
+                <label for="vertical">Vertical</label>
+                <select id="vertical" name="vertical" required>
+                  <option value="" disabled selected>Select vertical</option>
+                  <option value="vector-db">Vector database</option>
+                  <option value="analytics-db">Analytical database (ClickBench)</option>
+                  <option value="sql-oltp">SQL / OLTP (sysbench)</option>
+                  <option value="kv-store">Key-value store</option>
+                  <option value="distributed-sql">Distributed SQL database (BenchBase)</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="twitter-handle">Company Twitter / X</label>
+                <input
+                  id="twitter-handle"
+                  name="twitterHandle"
+                  type="text"
+                  placeholder='e.g. @qdrant_engine'
+                />
+              </div>
+
+              <h3 class="group-title">Customer GitHub (OSS repo)</h3>
+              <div class="field" style="grid-column: 1 / -1;">
+                <label for="github-url">
+                  Customer GitHub repo URL
+                  <span class="label-hint">
+                    Backend uses this to find the open-source version and stage
+                    deployment on Nirvana API + AWS API.
+                  </span>
+                </label>
+                <input
+                  id="github-url"
+                  name="githubUrl"
+                  type="url"
+                  placeholder="https://github.com/org/repo"
+                  required
+                />
+              </div>
+              <div class="field">
+                <label for="sales-email">Your email (for “results ready” notification)</label>
+                <input
+                  id="sales-email"
+                  name="salesEmail"
+                  type="email"
+                  placeholder="you@company.com"
+                />
+              </div>
+
+            </form>
+          </div>
+
+          <div class="actions-column">
+            <h2>Workflow actions</h2>
+            <p class="section-help">
+              1) Sales submits a benchmark request. 2) Backend reviews, wires up
+              Terraform + scripts, and runs the benchmark. 3) Sales gets an
+              email when results are ready and can generate assets.
+            </p>
+            <div class="primary-actions" id="sales-actions">
+              <button id="submit-request" class="btn primary">
+                Submit benchmark request
+              </button>
+              <p class="section-help small" id="request-status-text">
+                No request submitted yet.
+              </p>
+            </div>
+            <hr class="divider" />
+            <div class="primary-actions" id="result-actions">
+              <button id="generate-summary" class="btn secondary" disabled>
+                Generate benchmark summary
+              </button>
+              <button id="generate-metrics" class="btn secondary" disabled>
+                Generate metrics block
+              </button>
+              <button id="generate-tweets" class="btn secondary" disabled>
+                Generate tweet drafts
+              </button>
+              <p class="section-help small" id="results-status-text">
+                These will unlock automatically once the backend team marks the
+                benchmark as complete.
+              </p>
+            </div>
+            <p class="section-help small">
+              The vetted benchmark tool is pre-filled from the vertical; you can
+              edit it at the bottom of the page.
+            </p>
+          </div>
+        </section>
+
+        <section class="card">
+          <header class="card-header">
+            <div>
+              <h2>Benchmark summary</h2>
+              <p class="section-help">
+                Sales-ready prose summarizing the benchmark and Nirvana's edge.
+                Only available once results are ready.
+              </p>
+            </div>
+            <div class="card-actions">
+              <button
+                class="btn ghost"
+                data-copy-target="summary-output"
+              >
+                Copy
+              </button>
+              <button
+                class="btn ghost"
+                data-download-target="summary-output"
+                data-filename="benchmark-summary.md"
+              >
+                Download
+              </button>
+            </div>
+          </header>
+          <textarea
+            id="summary-output"
+            class="output-area"
+            placeholder="Click “Generate benchmark summary” to populate this section."
+          ></textarea>
+        </section>
+
+        <section class="card">
+          <header class="card-header">
+            <div>
+              <h2>Metrics block (Markdown)</h2>
+              <p class="section-help">
+                Blog-ready results section, including QPS, latency, and QP$.
+              </p>
+            </div>
+            <div class="card-actions">
+              <button
+                class="btn ghost"
+                data-copy-target="metrics-output"
+              >
+                Copy
+              </button>
+              <button
+                class="btn ghost"
+                data-download-target="metrics-output"
+                data-filename="benchmark-metrics.md"
+              >
+                Download
+              </button>
+            </div>
+          </header>
+          <textarea
+            id="metrics-output"
+            class="output-area"
+            placeholder="Click “Generate metrics block” to populate this section."
+          ></textarea>
+        </section>
+
+        <section class="card">
+          <header class="card-header">
+            <div>
+              <h2>Tweet drafts</h2>
+              <p class="section-help">
+                3–5 tweet thread using the hook / data / cost / CTA pattern.
+              </p>
+            </div>
+            <div class="card-actions">
+              <button
+                class="btn ghost"
+                data-copy-target="tweets-output"
+              >
+                Copy
+              </button>
+              <button
+                class="btn ghost"
+                data-download-target="tweets-output"
+                data-filename="tweet-thread.md"
+              >
+                Download
+              </button>
+            </div>
+          </header>
+          <textarea
+            id="tweets-output"
+            class="output-area"
+            placeholder="Click “Generate tweet drafts” to populate this section."
+          ></textarea>
+        </section>
+
+        <section class="card">
+          <h2>Vetted benchmark tool</h2>
+          <p class="section-help">
+            Pre-filled from the selected vertical; you can change the tool name and repo URL.
+          </p>
+          <div class="form-grid">
+            <div class="field">
+              <label for="benchmark-tool-label">Benchmark tool name</label>
+              <input
+                id="benchmark-tool-label"
+                type="text"
+                placeholder="e.g. VectorDBBench"
+              />
+            </div>
+            <div class="field" style="grid-column: 1 / -1;">
+              <label for="benchmark-tool-repo">Benchmark tool repo URL</label>
+              <input
+                id="benchmark-tool-repo"
+                type="url"
+                placeholder="https://github.com/zilliztech/VectorDBBench"
+              />
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="app-footer">
+        <p>
+          Built from the
+          <span class="mono">Benchmark-Driven Outbound Sales Playbook</span>.
+          Use this UI as the front door; keep the underlying infra + agent
+          logic owned by the dev team.
+        </p>
+      </footer>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+  </html>
+

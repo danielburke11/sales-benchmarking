@@ -1,0 +1,8 @@
+node_modules
+.git
+.gitignore
+data/requests.json
+.env
+*.md
+!README.md
+Benchmark Outbound Playbook*.md

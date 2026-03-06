@@ -1,0 +1,15 @@
+{
+  "name": "nirvana-benchmark-sales-ui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Front-end and backend for the Benchmark-Driven Outbound Sales Playbook.",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "static": "npx serve ."
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
+
