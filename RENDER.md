@@ -70,6 +70,8 @@ In the same screen, open **Environment** (or **Environment Variables**):
 - **RESEND_API_KEY** — Optional. Enables email: engineer gets next steps when a request is created; sales gets "results ready" when engineer marks complete. Get a key at [resend.com](https://resend.com). If unset, no emails are sent.
 - **APP_URL** — Optional. Your app URL for links in emails. Render sets RENDER_EXTERNAL_URL; the app uses that if APP_URL is not set.
 - **FROM_EMAIL** — Optional. Sender for emails (must be verified in Resend). Default: notifications@resend.dev.
+- **BENCHMARK_RESULTS_URL** — Optional. When the engineer marks a request complete, the backend can GET this URL with `?requestId=...` to fetch results (JSON). Use if your benchmark runner exposes an HTTP endpoint.
+- **BENCHMARK_FETCH_RESULTS_SCRIPT** — Optional. Command to run (e.g. `node scripts/fetch-results.js`) with `REQUEST_ID` in env; script prints JSON to stdout. Used when marking complete if results aren’t already stored via POST /api/requests/:id/results.
 
 Click **Add** for each variable you use.
 

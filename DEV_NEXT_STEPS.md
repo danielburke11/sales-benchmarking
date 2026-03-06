@@ -57,28 +57,36 @@ Details and VM specs per vertical are in **`Benchmark Outbound Playbook (1).md`*
 
 ---
 
-## 5. Mark the request ready (so sales can generate content)
+## 5. Send results to the backend (automated)
 
-When the benchmark run is done, PATCH the request with `status: "ready"` and the **results** object:
+So the engineer doesn’t have to type numbers in, have your benchmark script **POST results** when the run finishes:
 
 ```bash
-curl -X PATCH "https://YOUR-RENDER-APP-URL.onrender.com/api/requests/REQUEST_ID" \
+curl -X POST "https://YOUR-RENDER-APP-URL.onrender.com/api/requests/REQUEST_ID/results" \
   -H "Content-Type: application/json" \
   -d '{
-    "status": "ready",
-    "results": {
-      "nirvanaQps": 12300,
-      "awsQps": 7900,
-      "nirvanaP99": 4.1,
-      "awsP99": 7.8,
-      "nirvanaCost": 1.8,
-      "awsCost": 3.2,
-      "recall": 0.99
-    }
+    "nirvanaQps": 12300,
+    "awsQps": 7900,
+    "nirvanaP99": 4.1,
+    "awsP99": 7.8,
+    "nirvanaCost": 1.8,
+    "awsCost": 3.2,
+    "recall": 0.99
   }'
 ```
 
-Replace `YOUR-RENDER-APP-URL` and `REQUEST_ID`. Use your actual metric values. After this, the request will show **"Completed"** in the app and sales can use **Generate benchmark summary**, **Generate metrics block**, and **Generate tweet drafts**.
+Replace `YOUR-RENDER-APP-URL` and `REQUEST_ID`. Snake_case keys (`nirvana_qps`, etc.) are also accepted. After this, the request has results stored; the engineer can mark it complete in the app (see step 6).
+
+**Optional:** Set **`BENCHMARK_RESULTS_URL`** or **`BENCHMARK_FETCH_RESULTS_SCRIPT`** so the backend can fetch results automatically when the engineer clicks “Mark complete” (see README).
+
+---
+
+## 6. Mark the request ready (so sales can generate content)
+
+- **In the app:** Open “Engineer: Mark request complete”, select the request, and click **“Mark complete and notify sales”**. The backend uses stored results (from step 5) or fetches them if you configured `BENCHMARK_RESULTS_URL` / `BENCHMARK_FETCH_RESULTS_SCRIPT`.
+- **Or via API:** `PATCH /api/requests/REQUEST_ID` with `{"status":"ready"}` (results already stored or auto-fetched).
+
+After this, the request shows **“Completed”** and sales can use **Generate benchmark summary**, **Generate metrics block**, and **Generate tweet drafts**.
 
 ---
 
@@ -89,6 +97,7 @@ Replace `YOUR-RENDER-APP-URL` and `REQUEST_ID`. Use your actual metric values. A
 | List requests | GET | `/api/requests` |
 | Get one request | GET | `/api/requests/:id` |
 | Stage (GitHub → OSS) | POST | `/api/requests/:id/stage` |
-| Mark ready + results | PATCH | `/api/requests/:id` |
+| Push results (from benchmark script) | POST | `/api/requests/:id/results` |
+| Mark ready (engineer or API) | PATCH | `/api/requests/:id` |
 
 Base URL = your Render app URL (e.g. `https://sales-benchmarking-xxxx.onrender.com`).

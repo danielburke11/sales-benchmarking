@@ -9,12 +9,17 @@ const fs = require("fs");
 const path = require("path");
 const http = require("http");
 const https = require("https");
+const { exec } = require("child_process");
+const { promisify } = require("util");
+const execAsync = promisify(exec);
 
 const DATA_DIR = path.join(__dirname, "..", "data");
 const REQUESTS_FILE = path.join(DATA_DIR, "requests.json");
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const APP_URL = process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || "https://your-app.onrender.com";
 const FROM_EMAIL = process.env.FROM_EMAIL || "notifications@resend.dev";
+const BENCHMARK_FETCH_RESULTS_SCRIPT = process.env.BENCHMARK_FETCH_RESULTS_SCRIPT;
+const BENCHMARK_RESULTS_URL = process.env.BENCHMARK_RESULTS_URL;
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -198,6 +203,56 @@ function sendEmail(to, subject, html) {
   });
 }
 
+function normalizeResults(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  return {
+    nirvanaQps: obj.nirvanaQps ?? obj.nirvana_qps ?? null,
+    awsQps: obj.awsQps ?? obj.aws_qps ?? null,
+    nirvanaP99: obj.nirvanaP99 ?? obj.nirvana_p99 ?? null,
+    awsP99: obj.awsP99 ?? obj.aws_p99 ?? null,
+    nirvanaCost: obj.nirvanaCost ?? obj.nirvana_cost ?? null,
+    awsCost: obj.awsCost ?? obj.aws_cost ?? null,
+    recall: obj.recall ?? 0.99,
+  };
+}
+
+async function fetchBenchmarkResults(record) {
+  if (BENCHMARK_RESULTS_URL) {
+    try {
+      const base = BENCHMARK_RESULTS_URL.replace(/\/$/, "");
+      const resultsUrl = `${base}${base.includes("?") ? "&" : "?"}requestId=${encodeURIComponent(record.id)}`;
+      const data = await new Promise((resolve, reject) => {
+        const lib = resultsUrl.startsWith("https") ? https : http;
+        const req = lib.get(resultsUrl, (res) => {
+          let body = "";
+          res.on("data", (ch) => (body += ch));
+          res.on("end", () => resolve(body));
+        });
+        req.on("error", reject);
+      });
+      const parsed = JSON.parse(data);
+      return normalizeResults(parsed.results || parsed);
+    } catch (e) {
+      console.warn("BENCHMARK_RESULTS_URL fetch failed:", e.message);
+      return null;
+    }
+  }
+  if (BENCHMARK_FETCH_RESULTS_SCRIPT) {
+    try {
+      const { stdout } = await execAsync(BENCHMARK_FETCH_RESULTS_SCRIPT, {
+        env: { ...process.env, REQUEST_ID: record.id },
+        timeout: 30000,
+      });
+      const parsed = JSON.parse(stdout.trim());
+      return normalizeResults(parsed.results || parsed);
+    } catch (e) {
+      console.warn("BENCHMARK_FETCH_RESULTS_SCRIPT failed:", e.message);
+      return null;
+    }
+  }
+  return null;
+}
+
 function parseBody(req) {
   return new Promise((resolve, reject) => {
     let buf = "";
@@ -245,7 +300,7 @@ const server = http.createServer(async (req, res) => {
 
   const url = new URL(req.url || "/", `http://${req.headers.host}`);
   const pathname = url.pathname;
-  const idMatch = pathname.match(/^\/api\/requests\/([^/]+)(?:\/(stage))?$/);
+  const idMatch = pathname.match(/^\/api\/requests\/([^/]+)(?:\/(stage|results))?$/);
   const id = idMatch ? idMatch[1] : null;
   const action = idMatch ? idMatch[2] : null;
 
@@ -314,8 +369,7 @@ const server = http.createServer(async (req, res) => {
             <li><strong>Stage the request</strong> — Resolve the customer GitHub repo and get deployment details:<br/>
             <code>POST ${APP_URL}/api/requests/${record.id}/stage</code></li>
             <li><strong>Deploy and run</strong> — Use stagedConfig to deploy the OSS on Nirvana + AWS, then run the benchmark tool. Collect metrics (QPS, p99, cost, recall).</li>
-            <li><strong>Mark complete and notify sales</strong> — In the app, open "Engineer: Mark request complete", select this request, enter the results, and click "Mark complete and notify sales." Or via API:<br/>
-            <code>PATCH ${APP_URL}/api/requests/${record.id}</code> with body: <code>{"status":"ready","results":{"nirvanaQps":...,"awsQps":...,"nirvanaP99":...,"awsP99":...,"nirvanaCost":...,"awsCost":...,"recall":0.99}}</code></li>
+            <li><strong>Mark complete and notify sales</strong> — Have your benchmark script POST results to <code>POST ${APP_URL}/api/requests/${record.id}/results</code> when the run finishes. Then in the app, open "Engineer: Mark request complete", select this request, and click "Mark complete and notify sales." (Results are collected automatically from what you posted or from backend config.)</li>
           </ol>
           <p>Full instructions: Open <a href="${APP_URL}">${APP_URL}</a> and see DEV_NEXT_STEPS.md in the repo.</p>
         `;
@@ -374,6 +428,21 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (id && action === "results" && req.method === "POST") {
+      const body = await parseBody(req);
+      const requests = loadRequests();
+      const record = requests.find((r) => r.id === id);
+      if (!record) {
+        send(res, 404, { message: "Request not found" });
+        return;
+      }
+      record.results = normalizeResults(body.results || body) || record.results;
+      record.updatedAt = new Date().toISOString();
+      saveRequests(requests);
+      send(res, 200, { id: record.id, results: record.results, message: "Results stored. Engineer can mark request complete." });
+      return;
+    }
+
     if (id && req.method === "PATCH") {
       const body = await parseBody(req);
       const requests = loadRequests();
@@ -383,8 +452,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (body.status != null) record.status = body.status;
-      if (body.results != null) record.results = body.results;
+      if (body.results != null) record.results = normalizeResults(body.results) || record.results;
       if (body.stagedConfig != null) record.stagedConfig = body.stagedConfig;
+      if (record.status === "ready" && !record.results) {
+        const fetched = await fetchBenchmarkResults(record);
+        if (fetched) record.results = fetched;
+      }
       record.updatedAt = new Date().toISOString();
       saveRequests(requests);
       if (record.status === "ready" && record.salesEmail) {
@@ -410,6 +483,7 @@ server.listen(PORT, HOST, () => {
   console.log("  POST /api/requests        - create request (sales)");
   console.log("  GET  /api/requests        - list requests");
   console.log("  GET  /api/requests/:id    - get one request");
-  console.log("  POST /api/requests/:id/stage - resolve GitHub → OSS, stage for Nirvana + AWS");
-  console.log("  PATCH /api/requests/:id   - update status/results");
+  console.log("  POST /api/requests/:id/stage   - resolve GitHub → OSS, stage for Nirvana + AWS");
+  console.log("  POST /api/requests/:id/results - store results (benchmark script); backend can also auto-fetch via env");
+  console.log("  PATCH /api/requests/:id   - update status/results (mark ready; results from body or auto-fetch)");
 });

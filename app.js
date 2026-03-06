@@ -916,29 +916,15 @@ document.addEventListener("DOMContentLoaded", () => {
       if (engineerStatus) engineerStatus.textContent = "Select a request first.";
       return;
     }
-    const getVal = (elemId) => {
-      const el = document.getElementById(elemId);
-      const v = el?.value?.trim();
-      return v === "" ? undefined : Number(v);
-    };
-    const results = {
-      nirvanaQps: getVal("eng-nirvana-qps"),
-      awsQps: getVal("eng-aws-qps"),
-      nirvanaP99: getVal("eng-nirvana-p99"),
-      awsP99: getVal("eng-aws-p99"),
-      nirvanaCost: getVal("eng-nirvana-cost"),
-      awsCost: getVal("eng-aws-cost"),
-      recall: getVal("eng-recall") ?? 0.99,
-    };
     const apiBase = getApiBase();
     const url = apiBase ? `${apiBase}/api/requests/${id}` : `/api/requests/${id}`;
-    if (engineerStatus) engineerStatus.textContent = "Saving…";
+    if (engineerStatus) engineerStatus.textContent = "Marking complete and fetching results…";
     if (engineerMarkBtn) engineerMarkBtn.disabled = true;
     try {
       const res = await fetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "ready", results }),
+        body: JSON.stringify({ status: "ready" }),
       });
       if (!res.ok) throw new Error(await res.text());
       if (engineerStatus) engineerStatus.textContent = "Marked complete. Sales will receive an email that results are ready.";

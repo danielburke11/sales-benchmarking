@@ -363,10 +363,6 @@ select {
 }
 
 /* Engineer section */
-.engineer-card .results-fields {
-  margin: 0.75rem 0;
-}
-
 .engineer-form .field label {
   font-size: 0.82rem;
 }

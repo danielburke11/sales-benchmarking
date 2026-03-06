@@ -31,9 +31,12 @@ Then open **http://localhost:3001**. The same origin serves the UI and `/api/req
 | `GET` | `/api/requests` | List all requests. |
 | `GET` | `/api/requests/:id` | Get one request. |
 | `POST` | `/api/requests/:id/stage` | Resolve GitHub URL → repo info + root contents; detect Docker/compose; set `stagedConfig` and `status: "staged"`. |
-| `PATCH` | `/api/requests/:id` | Update `status`, `results`, or `stagedConfig` (e.g. set `status: "ready"` and `results: { nirvanaQps, awsQps, ... }` when benchmark is done). |
+| `POST` | `/api/requests/:id/results` | Store benchmark results (e.g. from your benchmark script). Body: `{ nirvanaQps, awsQps, nirvanaP99, awsP99, nirvanaCost, awsCost, recall }`. |
+| `PATCH` | `/api/requests/:id` | Update `status` or `results`. When setting `status: "ready"`, backend uses stored results or auto-fetches if configured (see below). |
 
 Data is stored in **`data/requests.json`**.
+
+**Automated results:** Have your benchmark script POST to `/api/requests/:id/results` when the run finishes. The engineer can then click “Mark complete” in the app without typing numbers. Optional env: **`BENCHMARK_RESULTS_URL`** (GET URL that returns JSON with results for `?requestId=...`) or **`BENCHMARK_FETCH_RESULTS_SCRIPT`** (script run with `REQUEST_ID` in env; stdout = JSON) so the backend can fetch results when the engineer marks complete.
 
 ## Staging (GitHub → OSS)
 
