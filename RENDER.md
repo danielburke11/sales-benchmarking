@@ -66,7 +66,10 @@ Use these settings:
 In the same screen, open **Environment** (or **Environment Variables**):
 
 - **PORT** — Do **not** set this; Render sets it automatically.
-- **GITHUB_TOKEN** — Optional. If you want better rate limits when using “Stage from GitHub,” add a [GitHub Personal Access Token](https://github.com/settings/tokens) (no scopes needed for public repos). If you skip it, staging still works but may hit rate limits under heavy use.
+- **GITHUB_TOKEN** — Optional. Better rate limits for "Stage from GitHub." [GitHub token](https://github.com/settings/tokens) (no scopes for public repos).
+- **RESEND_API_KEY** — Optional. Enables email: engineer gets next steps when a request is created; sales gets "results ready" when engineer marks complete. Get a key at [resend.com](https://resend.com). If unset, no emails are sent.
+- **APP_URL** — Optional. Your app URL for links in emails. Render sets RENDER_EXTERNAL_URL; the app uses that if APP_URL is not set.
+- **FROM_EMAIL** — Optional. Sender for emails (must be verified in Resend). Default: notifications@resend.dev.
 
 Click **Add** for each variable you use.
 

@@ -350,9 +350,37 @@ select {
   border-color: rgba(148, 163, 184, 0.4);
 }
 
+.request-log-row--selected {
+  border-color: rgba(56, 189, 248, 0.6);
+  background: rgba(56, 189, 248, 0.12);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3);
+}
+
+.request-log-num {
+  font-weight: 700;
+  color: #94a3b8;
+  margin-right: 0.35rem;
+}
+
+/* Engineer section */
+.engineer-card .results-fields {
+  margin: 0.75rem 0;
+}
+
+.engineer-form .field label {
+  font-size: 0.82rem;
+}
+
 .request-log-company {
   font-weight: 600;
   color: #e5e7eb;
+}
+
+.request-log-row > div:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
 }
 
 .request-log-meta {

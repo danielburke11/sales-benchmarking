@@ -117,6 +117,15 @@
                   placeholder="you@company.com"
                 />
               </div>
+              <div class="field">
+                <label for="engineer-email">Engineer email (receives request + instructions)</label>
+                <input
+                  id="engineer-email"
+                  name="engineerEmail"
+                  type="email"
+                  placeholder="engineer@company.com"
+                />
+              </div>
 
             </form>
           </div>
@@ -278,12 +287,61 @@
           </div>
         </section>
 
+        <section class="card engineer-card">
+          <h2>Engineer: Mark request complete</h2>
+          <p class="section-help">
+            Select a request, enter benchmark results, and click to mark it complete. The sales person will receive an email that results are ready.
+          </p>
+          <div class="engineer-form">
+            <div class="field">
+              <label for="engineer-select-request">Request</label>
+              <select id="engineer-select-request">
+                <option value="">— Select a request —</option>
+              </select>
+            </div>
+            <div class="results-fields form-grid">
+              <div class="field">
+                <label for="eng-nirvana-qps">Nirvana QPS</label>
+                <input id="eng-nirvana-qps" type="number" step="0.01" placeholder="e.g. 12300" />
+              </div>
+              <div class="field">
+                <label for="eng-aws-qps">AWS QPS</label>
+                <input id="eng-aws-qps" type="number" step="0.01" placeholder="e.g. 7900" />
+              </div>
+              <div class="field">
+                <label for="eng-nirvana-p99">Nirvana p99 (ms)</label>
+                <input id="eng-nirvana-p99" type="number" step="0.01" placeholder="e.g. 4.1" />
+              </div>
+              <div class="field">
+                <label for="eng-aws-p99">AWS p99 (ms)</label>
+                <input id="eng-aws-p99" type="number" step="0.01" placeholder="e.g. 7.8" />
+              </div>
+              <div class="field">
+                <label for="eng-nirvana-cost">Nirvana cost/hr ($)</label>
+                <input id="eng-nirvana-cost" type="number" step="0.0001" placeholder="e.g. 1.8" />
+              </div>
+              <div class="field">
+                <label for="eng-aws-cost">AWS cost/hr ($)</label>
+                <input id="eng-aws-cost" type="number" step="0.0001" placeholder="e.g. 3.2" />
+              </div>
+              <div class="field">
+                <label for="eng-recall">Recall</label>
+                <input id="eng-recall" type="number" step="0.0001" min="0" max="1" placeholder="e.g. 0.99" />
+              </div>
+            </div>
+            <button type="button" id="engineer-mark-complete" class="btn primary">
+              Mark complete and notify sales
+            </button>
+            <p class="section-help small" id="engineer-status"></p>
+          </div>
+        </section>
+
         <section class="card request-log-card">
           <header class="card-header">
             <div>
               <h2>Request log</h2>
               <p class="section-help">
-                All benchmark requests so you don’t duplicate. Check progress and refresh to see updates from the backend.
+                Numbered list of all requests. Click a row to select it; the three buttons above use the selected request for generating content.
               </p>
             </div>
             <div class="card-actions">
@@ -296,7 +354,7 @@
             <p class="request-log-empty" id="request-log-empty">No requests yet. Submit a benchmark request above.</p>
           </div>
           <p class="section-help small request-log-hint">
-            <strong>When to refresh:</strong> After you submit, click Refresh to see your request. As the backend stages and runs the benchmark, click Refresh again to see status move to “Back end deploying” and then “Completed.” On Render, reload the page or click Refresh to pick up the latest.
+            <strong>When to refresh:</strong> After you submit, click Refresh. When a request shows "Completed," click it to select (row highlights); then use the buttons above to generate summary, metrics, and tweet drafts.
           </p>
         </section>
       </main>

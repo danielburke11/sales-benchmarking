@@ -15,6 +15,7 @@ function collectFormData() {
   const twitterHandle = (fd.get("twitterHandle") || "").toString().trim();
   const githubUrl = (fd.get("githubUrl") || "").toString().trim();
   const salesEmail = (fd.get("salesEmail") || "").toString().trim();
+  const engineerEmail = (fd.get("engineerEmail") || "").toString().trim();
 
   const benchmarkToolLabelEl = document.getElementById("benchmark-tool-label");
   const benchmarkToolRepoEl = document.getElementById("benchmark-tool-repo");
@@ -38,6 +39,7 @@ function collectFormData() {
     twitterHandle: twitterHandle || "@qdrant_engine",
     githubUrl,
     salesEmail,
+    engineerEmail,
     benchmarkToolLabel,
     benchmarkToolRepo,
     // Dataset + VM spec now come from the benchmark tool defaults,
@@ -164,6 +166,7 @@ function syncBenchmarkToolFromVertical() {
 // --- Sales workflow state ---
 
 let currentRequest = null;
+let selectedRequestId = null;
 
 /** Map API status to display label for the request log */
 function getStatusLabel(status) {
@@ -222,7 +225,8 @@ async function fetchRequestLog() {
     emptyEl.style.display = "none";
     const sorted = [...requests].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     listEl.innerHTML = "";
-    sorted.forEach((r) => {
+    sorted.forEach((r, idx) => {
+      const num = idx + 1;
       const { label: statusLabel, className: statusClass } = getStatusLabel(r.status);
       const row = document.createElement("div");
       row.className = "request-log-row";
@@ -230,14 +234,18 @@ async function fetchRequestLog() {
       if (r.status === "ready" && r.results) {
         row.setAttribute("data-ready", "1");
         row.style.cursor = "pointer";
-        row.title = "Click to load this request and generate summary/metrics/tweets";
+        row.title = "Click to select and generate summary/metrics/tweets";
+      } else {
+        row.style.cursor = "pointer";
+        row.title = "Click to select this request";
       }
       const company = r.company || "—";
       const product = r.product ? ` · ${r.product}` : "";
       const repo = r.githubUrl ? r.githubUrl.replace(/^https?:\/\//, "").replace(/\/$/, "") : "";
       row.innerHTML = `
         <div>
-          <div class="request-log-company">${escapeHtml(company)}${escapeHtml(product)}</div>
+          <span class="request-log-num">${num}.</span>
+          <span class="request-log-company">${escapeHtml(company)}${escapeHtml(product)}</span>
           <div class="request-log-meta request-log-id">${escapeHtml(r.id)}</div>
           ${repo ? `<div class="request-log-meta">${escapeHtml(repo)}</div>` : ""}
         </div>
@@ -245,11 +253,30 @@ async function fetchRequestLog() {
         <span class="request-log-date">${escapeHtml(formatRequestDate(r.createdAt))}</span>
       `;
       row.addEventListener("click", () => {
-        if (row.getAttribute("data-ready") !== "1") return;
-        loadRequestById(r.id);
+        ["summary-output", "metrics-output", "tweets-output"].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.value = "";
+        });
+        listEl.querySelectorAll(".request-log-row--selected").forEach((el) => el.classList.remove("request-log-row--selected"));
+        row.classList.add("request-log-row--selected");
+        selectedRequestId = r.id;
+        if (r.status === "ready" && r.results) {
+          currentRequest = { id: r.id, status: r.status, salesInputs: { company: r.company, product: r.product, vertical: r.vertical, twitterHandle: r.twitterHandle, githubUrl: r.githubUrl, salesEmail: r.salesEmail, benchmarkToolLabel: r.benchmarkToolLabel, benchmarkToolRepo: r.benchmarkToolRepo }, results: r.results };
+          setResultsReady(r.results);
+        } else {
+          currentRequest = null;
+          ["generate-summary", "generate-metrics", "generate-tweets"].forEach((id) => {
+            const btn = document.getElementById(id);
+            if (btn) btn.disabled = true;
+          });
+          const resultsStatus = document.getElementById("results-status-text");
+          if (resultsStatus) resultsStatus.textContent = "Select a completed request from the log below to generate content.";
+        }
       });
       listEl.appendChild(row);
+      if (selectedRequestId === r.id) row.classList.add("request-log-row--selected");
     });
+    populateEngineerSelect(requests);
   } catch (_) {
     emptyEl.style.display = "block";
     emptyEl.textContent = "Could not load requests. Check the app URL and try Refresh again.";
@@ -269,14 +296,29 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
+function populateEngineerSelect(requests) {
+  const sel = document.getElementById("engineer-select-request");
+  if (!sel) return;
+  const sorted = [...(requests || [])].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  sel.innerHTML = '<option value="">— Select a request —</option>';
+  sorted.forEach((r, idx) => {
+    const opt = document.createElement("option");
+    opt.value = r.id;
+    const status = r.status === "ready" ? "Completed" : r.status === "staged" ? "Back end deploying" : "Sales requested";
+    opt.textContent = `${idx + 1}. ${r.company || "—"} (${status})`;
+    sel.appendChild(opt);
+  });
+}
+
 async function loadRequestById(id) {
   const apiBase = getApiBase();
   if (!apiBase) return;
   try {
-    const res = await fetch(`${apiBase}/api/requests/${id}`);
+    const res = await fetch(apiBase ? `${apiBase}/api/requests/${id}` : `/api/requests/${id}`);
     if (!res.ok) return;
     const record = await res.json();
     if (record.status !== "ready" || !record.results) return;
+    selectedRequestId = record.id;
     currentRequest = {
       id: record.id,
       status: record.status,
@@ -293,6 +335,12 @@ async function loadRequestById(id) {
       results: record.results,
     };
     setResultsReady(record.results);
+    const listEl = document.getElementById("request-log-list");
+    if (listEl) {
+      listEl.querySelectorAll(".request-log-row--selected").forEach((el) => el.classList.remove("request-log-row--selected"));
+      const row = listEl.querySelector(`[data-request-id="${record.id}"]`);
+      if (row) row.classList.add("request-log-row--selected");
+    }
   } catch (_) {}
 }
 
@@ -730,6 +778,7 @@ async function submitBenchmarkRequest() {
         githubUrl: data.githubUrl,
         twitterHandle: data.twitterHandle,
         salesEmail: data.salesEmail,
+        engineerEmail: data.engineerEmail,
         benchmarkToolId: tool.id,
         benchmarkToolLabel: data.benchmarkToolLabel || tool.label,
         benchmarkToolRepo: data.benchmarkToolRepo || tool.repo,
@@ -857,6 +906,49 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const refreshLogBtn = document.getElementById("refresh-request-log");
   refreshLogBtn?.addEventListener("click", () => fetchRequestLog());
+
+  const engineerMarkBtn = document.getElementById("engineer-mark-complete");
+  const engineerStatus = document.getElementById("engineer-status");
+  engineerMarkBtn?.addEventListener("click", async () => {
+    const sel = document.getElementById("engineer-select-request");
+    const id = sel?.value;
+    if (!id) {
+      if (engineerStatus) engineerStatus.textContent = "Select a request first.";
+      return;
+    }
+    const getVal = (elemId) => {
+      const el = document.getElementById(elemId);
+      const v = el?.value?.trim();
+      return v === "" ? undefined : Number(v);
+    };
+    const results = {
+      nirvanaQps: getVal("eng-nirvana-qps"),
+      awsQps: getVal("eng-aws-qps"),
+      nirvanaP99: getVal("eng-nirvana-p99"),
+      awsP99: getVal("eng-aws-p99"),
+      nirvanaCost: getVal("eng-nirvana-cost"),
+      awsCost: getVal("eng-aws-cost"),
+      recall: getVal("eng-recall") ?? 0.99,
+    };
+    const apiBase = getApiBase();
+    const url = apiBase ? `${apiBase}/api/requests/${id}` : `/api/requests/${id}`;
+    if (engineerStatus) engineerStatus.textContent = "Saving…";
+    if (engineerMarkBtn) engineerMarkBtn.disabled = true;
+    try {
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "ready", results }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      if (engineerStatus) engineerStatus.textContent = "Marked complete. Sales will receive an email that results are ready.";
+      fetchRequestLog();
+    } catch (e) {
+      if (engineerStatus) engineerStatus.textContent = `Error: ${e.message}`;
+    } finally {
+      if (engineerMarkBtn) engineerMarkBtn.disabled = false;
+    }
+  });
 
   fetchRequestLog();
 });

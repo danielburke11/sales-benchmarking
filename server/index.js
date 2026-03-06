@@ -12,6 +12,9 @@ const https = require("https");
 
 const DATA_DIR = path.join(__dirname, "..", "data");
 const REQUESTS_FILE = path.join(DATA_DIR, "requests.json");
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const APP_URL = process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || "https://your-app.onrender.com";
+const FROM_EMAIL = process.env.FROM_EMAIL || "notifications@resend.dev";
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -164,6 +167,37 @@ function send(res, status, body) {
   res.end(typeof body === "string" ? body : JSON.stringify(body));
 }
 
+function sendEmail(to, subject, html) {
+  if (!RESEND_API_KEY || !to) return Promise.resolve();
+  const payload = JSON.stringify({
+    from: FROM_EMAIL,
+    to: [to],
+    subject,
+    html,
+  });
+  return new Promise((resolve) => {
+    const req = https.request(
+      "https://api.resend.com/emails",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${RESEND_API_KEY}`,
+          "Content-Length": Buffer.byteLength(payload),
+        },
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (ch) => (body += ch));
+        res.on("end", () => resolve());
+      }
+    );
+    req.on("error", () => resolve());
+    req.write(payload);
+    req.end();
+  });
+}
+
 function parseBody(req) {
   return new Promise((resolve, reject) => {
     let buf = "";
@@ -258,6 +292,7 @@ const server = http.createServer(async (req, res) => {
         githubUrl: body.githubUrl,
         twitterHandle: body.twitterHandle,
         salesEmail: body.salesEmail,
+        engineerEmail: body.engineerEmail,
         benchmarkToolId: body.benchmarkToolId,
         benchmarkToolLabel: body.benchmarkToolLabel,
         benchmarkToolRepo: body.benchmarkToolRepo,
@@ -266,6 +301,26 @@ const server = http.createServer(async (req, res) => {
       };
       requests.push(record);
       saveRequests(requests);
+      if (record.engineerEmail) {
+        const engineerHtml = `
+          <p>A new benchmark request has been submitted and is ready for you to run.</p>
+          <p><strong>Request ID:</strong> ${record.id}</p>
+          <p><strong>Company:</strong> ${record.company}</p>
+          <p><strong>Product:</strong> ${record.product || "—"}</p>
+          <p><strong>GitHub:</strong> ${record.githubUrl}</p>
+          <p><strong>Benchmark tool:</strong> ${record.benchmarkToolLabel || "—"} (${record.benchmarkToolRepo || "—"})</p>
+          <h3>Next steps</h3>
+          <ol>
+            <li><strong>Stage the request</strong> — Resolve the customer GitHub repo and get deployment details:<br/>
+            <code>POST ${APP_URL}/api/requests/${record.id}/stage</code></li>
+            <li><strong>Deploy and run</strong> — Use stagedConfig to deploy the OSS on Nirvana + AWS, then run the benchmark tool. Collect metrics (QPS, p99, cost, recall).</li>
+            <li><strong>Mark complete and notify sales</strong> — In the app, open "Engineer: Mark request complete", select this request, enter the results, and click "Mark complete and notify sales." Or via API:<br/>
+            <code>PATCH ${APP_URL}/api/requests/${record.id}</code> with body: <code>{"status":"ready","results":{"nirvanaQps":...,"awsQps":...,"nirvanaP99":...,"awsP99":...,"nirvanaCost":...,"awsCost":...,"recall":0.99}}</code></li>
+          </ol>
+          <p>Full instructions: Open <a href="${APP_URL}">${APP_URL}</a> and see DEV_NEXT_STEPS.md in the repo.</p>
+        `;
+        sendEmail(record.engineerEmail, `Benchmark request: ${record.company} (${record.id})`, engineerHtml).catch(() => {});
+      }
       send(res, 201, {
         id: record.id,
         status: record.status,
@@ -332,6 +387,14 @@ const server = http.createServer(async (req, res) => {
       if (body.stagedConfig != null) record.stagedConfig = body.stagedConfig;
       record.updatedAt = new Date().toISOString();
       saveRequests(requests);
+      if (record.status === "ready" && record.salesEmail) {
+        const salesHtml = `
+          <p>Your benchmark results for <strong>${record.company}</strong> are ready.</p>
+          <p>Open the app and click the completed request in the Request log to generate your summary, metrics block, and tweet drafts.</p>
+          <p><a href="${APP_URL}">${APP_URL}</a></p>
+        `;
+        sendEmail(record.salesEmail, `Benchmark results ready: ${record.company}`, salesHtml).catch(() => {});
+      }
       send(res, 200, record);
       return;
     }
